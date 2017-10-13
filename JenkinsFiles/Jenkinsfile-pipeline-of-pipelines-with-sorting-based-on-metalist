@@ -1,0 +1,65 @@
+node {
+	// there are three jobs a-with-param, b-with-param, c-with-param 
+	// which take in one parameter - true or false. if passed false, the job fails else the job runs successfully
+	// input param sample - [['c-with-param',false,true],['a-with-param',true,true],['b-with-param',true, false]]
+	// expected to run a(passes),b(passes),c(fails),a-rollback(passes),b-rollback(fails),c-rollback(passes)
+    print "Input parameter - " + params.pipelineJobListWithParams
+	
+	def metaPipelineList = ['a-with-param','b-with-param','c-with-param']
+	def unsortedPipeLine = evaluate(params.pipelineJobListWithParams)
+	def sortedPipeline = sortPipelineNames(metaPipelineList, unsortedPipeLine)
+	
+	print "UnSorted Pipeline - " + unsortedPipeLine
+	print "Sorted Pipeline - " + sortedPipeline
+    
+    def rollbackList = []
+	for (listItem in sortedPipeline) {
+        def pipelineName = listItem.get(0);
+        print "pipeline to be executed - " + pipelineName
+        boolean paramForBuild = listItem.get(1)
+        print "passed param - " + paramForBuild
+		boolean rollbackParamForBuild = listItem.get(2)
+		print "rollback param - " + rollbackParamForBuild
+        rollbackList.add(listItem)
+        stage(pipelineName) {
+            try{
+		        build job: pipelineName, parameters: [[$class: 'BooleanParameterValue', name: 'isProper', value: paramForBuild]]
+            }
+            catch(e){
+				print "Job '"+pipelineName+"' failed with param - "+ paramForBuild+"."
+				print "going ahead with the rollback for all pipelines until the pipeline which failed."
+                for (rollbackListItem in rollbackList) {
+                    def rollbackPipelineName = rollbackListItem.get(0);
+                    print "rollback pipeline to be executed - " + rollbackPipelineName
+					print "param for rollback -" + rollbackListItem.get(2)
+					try{
+						stage("rollback - "+rollbackPipelineName) {
+							build job: rollbackPipelineName, parameters: [[$class: 'BooleanParameterValue', name: 'isProper', value: rollbackListItem.get(2)]]
+						}
+					}
+					catch(exc){
+						print "Rollback job '" +rollbackPipelineName+ "' failed for input param -" + rollbackListItem.get(2)
+						echo "send email and continue rolling back next job"
+					}
+                }
+                throw e
+            }
+		}
+    }
+    stage('Test') {
+		echo 'Testing..'
+	} 
+}
+
+def sortPipelineNames(metaPipelineList, inputPipelineList){
+    def sortedPipeline = []
+
+	for (String i : metaPipelineList){
+	    for (item in inputPipelineList){
+	        if(item.get(0).contains(i)){
+	            sortedPipeline.add(item)
+	        }
+	    }
+	}
+	return sortedPipeline
+}

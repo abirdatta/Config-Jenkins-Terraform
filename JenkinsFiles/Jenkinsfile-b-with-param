@@ -1,0 +1,15 @@
+node {
+    def x = params.isProper
+    print "is a proper build - " + x
+    if(x) {
+        stage('1st stage of pipeline B') { // for display purposes
+            sh "java -version"
+        }
+    }
+    else{
+        stage('1st stage of pipeline B') { // for display purposes
+            sh "java -versin"
+        }
+    }
+    
+}
